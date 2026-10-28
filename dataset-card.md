@@ -17,7 +17,7 @@ size_categories:
 - 1K<n<10K
 configs:
 - config_name: default
-  data_files: catalog.csv
+  data_files: catalog.parquet
 ---
 
 # open-vrma
@@ -37,11 +37,11 @@ cmu/<subject>_<trial>.vrma          CMU mocap（例 cmu/60_01.vrma = サルサ�
 cmu/<subject>_<trial>.motion.json   そのモーションのメタデータ（ライセンス・タグ・拍・接地など）
 quaternius/ual1/<name>.vrma         Quaternius Universal Animation Library（+ .motion.json）
 quaternius/ual2/<name>.vrma         Quaternius Universal Animation Library 2（+ .motion.json）
-catalog.jsonl / catalog.csv         1行1モーションの一覧（.motion.json から生成）
+catalog.parquet / .jsonl / .csv     1行1モーションの一覧（.motion.json から生成）
 LICENSE.md                          素材ごとのライセンスとクレジット
 ```
 
-各 VRMA の隣の `.motion.json` が正本のメタデータです（形式は Motion Meta 0.1）。ライセンス（SPDX の識別子・そのまま貼れるクレジット文・作者・出典）は1本ごとにここに書いてあります。
+各 VRMA の隣の `.motion.json` が正本のメタデータです（形式は Motion Meta 0.1。仕様は [sanamiy/open-vrma の spec/](https://github.com/sanamiy/open-vrma/tree/main/spec)）。ライセンス（SPDX の識別子・そのまま貼れるクレジット文・作者・出典）は1本ごとにここに書いてあります。
 
 ### 使い方（three-vrm）
 
@@ -56,7 +56,7 @@ new THREE.AnimationMixer(vrm.scene).clipAction(clip).play();
 ### 取得
 
 ```bash
-hf download Sanami/open-vrma --repo-type dataset --include "catalog.csv"     # 一覧だけ
+hf download Sanami/open-vrma --repo-type dataset --include "catalog.parquet" # 一覧だけ
 hf download Sanami/open-vrma --repo-type dataset --include "cmu/60_*.vrma"   # 必要な分だけ
 ```
 
@@ -65,7 +65,7 @@ hf download Sanami/open-vrma --repo-type dataset --include "cmu/60_*.vrma"   # �
 | 項目 | 意味 |
 |---|---|
 | `license` | `spdx`（`CC0-1.0` / `LicenseRef-CMU-Mocap`）、`attribution`（クレジット文）、`authors`、`source`（元の素材と ID） |
-| `tags.kind` | dance / idle / walk / run / jump / gesture / sit / sports / acrobatics / action / other。元の説明文・名前のキーワードから |
+| `tags.kind` | dance / idle / walk / run / jump / gesture / sit / sports / acrobatics / action / other。**元の説明文・名前のキーワードから決めた目安**（CMU の説明が "clean" "unknown" などのものは other） |
 | `tags.genre` | ダンスのジャンル（salsa / charleston / modern / indian / breakdance / lambada / pop / chicken-dance / casual） |
 | `tags.energy` | 1 ほぼ静止 ～ 5 全身で激しい（手足と頭の平均の速さから） |
 | `tags.bodyParts` | 主に動く部位の配列（head / torso / arms / hands / hips / legs / full） |
@@ -74,7 +74,7 @@ hf download Sanami/open-vrma --repo-type dataset --include "cmu/60_*.vrma"   # �
 | `tags.floorWork`, `tags.airborne` | 腰を低く落とす時間が長い／両足が浮く時間が長い |
 | `tags.fingers` | 指の動きを含む（Quaternius のみ） |
 | `tags.rootMotion` | 腰の移動を含む（CMU は全部、Quaternius は `_RM` 付きのもの） |
-| `tempo` | 動きの周期から推定した拍（`bpm`・`firstBeat`・`confidence`）。周期がはっきりしなければ `bpm: null` |
+| `tempo` | 動きの拍（`bpm`・`firstBeat`・`confidence`）。`basis: "steps"` は足の接地の間隔から測った歩数のテンポ、`basis: "motion"` は体の動きの周期から推定した値。`alternatives` に倍・半分の候補。曲のテンポではないので、合わせるときは候補から近いものを選ぶ。はっきりしなければ `bpm: null` |
 | `loop` | 最初と最後のポーズが近いものだけ（`poseDiffDeg`、拍が分かれば `beats`）。無いものはループさせない |
 | `root` | 腰の移動と向き（`netTravel` `maxTravel` は腰の高さ倍、`netTurnDeg` `turnRangeDeg`、`hipsBounce`） |
 | `poses` | 最初と最後の姿勢・軸足・腕の位置（前後の動きをつなぐときに使う） |
@@ -82,9 +82,15 @@ hf download Sanami/open-vrma --repo-type dataset --include "cmu/60_*.vrma"   # �
 | `events` / `ranges` | 足の接地・離地（`contact` / `lift`）と、足を固定してよい区間（`footLock`） |
 | `x.openVrma` | タグの元になった解析値 |
 
-一覧（catalog）の列は `id, file, name, description, duration, license, attribution` と `tags` の全項目、`bpm, tempoBand, loopable, loopBeats, hasTiming, travel, turnDeg, startPose, endPose` です。
+一覧（catalog）の列は `id, file, name, description, duration, license, attribution` と `tags` の全項目、`bpm, tempoBasis, tempoAlternatives, tempoBand, loopable, loopBeats, hasTiming, travel, turnDeg, startPose, endPose` です。
 
-タグ・拍・接地はすべて自動推定で（`provenance` が `auto`）、間違いを含みます。特に `bpm` は音楽ではなく動きから推定した値です。
+### 精度について
+
+タグ・拍・接地はすべて自動で付けたもので（`provenance` が `auto`）、間違いを含みます。今後、人や画像を見るモデルの確認で直していき、直した項目は `provenance` を `human` / `model` にします。
+
+- **測った値**（接地・姿勢・移動量・向き・拍）: 54本を抜き出して VRM に当てた絵で確かめ、判定を直しました。最初と最後の姿勢は約95%が見た目どおりです。苦手なのは、つま先立ち（バレエ）、速い走りの短い着地、ボールや台など物の上に乗る動き、椅子に座った姿勢（crouch になる）です。
+- **意味のタグ**（`kind` `genre`）: 元の説明文のキーワードから決めた目安です。説明の無い CMU のクリップ（約300本）は `other` です。
+- `mood` `sections` `songTempo` はまだ入っていません。
 
 ## 変換について
 

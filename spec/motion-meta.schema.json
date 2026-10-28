@@ -1,0 +1,814 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/motion-meta/0.1/motion-meta.schema.json",
+  "title": "Motion Meta 0.1",
+  "description": "VRMA（VRM Animation）1本に添えるメタデータ。時刻はすべてクリップ先頭からの秒。",
+  "type": "object",
+  "required": [
+    "specVersion",
+    "id",
+    "duration",
+    "license"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "specVersion": {
+      "type": "string",
+      "pattern": "^0\\.1(\\.\\d+)?$"
+    },
+    "id": {
+      "$ref": "#/$defs/slug"
+    },
+    "animation": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 0
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "description": {
+      "type": "string"
+    },
+    "duration": {
+      "type": "number",
+      "exclusiveMinimum": 0
+    },
+    "sourceFps": {
+      "type": "number",
+      "exclusiveMinimum": 0
+    },
+    "license": {
+      "type": "object",
+      "required": [
+        "spdx",
+        "attribution"
+      ],
+      "properties": {
+        "spdx": {
+          "type": "string",
+          "pattern": "^(CC0-1\\.0|CC-BY-4\\.0|CC-BY-SA-4\\.0|CC-BY-NC-4\\.0|LicenseRef-[A-Za-z0-9.-]+)$"
+        },
+        "url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "attribution": {
+          "type": "string"
+        },
+        "authors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/person"
+          }
+        },
+        "source": {
+          "type": "object",
+          "required": [
+            "kind"
+          ],
+          "properties": {
+            "kind": {
+              "enum": [
+                "keyframe",
+                "mocap",
+                "video-estimate",
+                "generated",
+                "mixed"
+              ]
+            },
+            "url": {
+              "type": "string",
+              "format": "uri"
+            },
+            "originalId": {
+              "type": "string"
+            },
+            "originalFormat": {
+              "enum": [
+                "vrma",
+                "bvh",
+                "fbx",
+                "glb",
+                "gltf",
+                "vmd",
+                "other"
+              ]
+            },
+            "converter": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": true
+        },
+        "performerConsent": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": true
+    },
+    "tags": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "enum": [
+            "dance",
+            "idle",
+            "walk",
+            "run",
+            "jump",
+            "sit",
+            "gesture",
+            "acrobatics",
+            "sports",
+            "action",
+            "other"
+          ]
+        },
+        "genre": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/slug"
+          },
+          "uniqueItems": true,
+          "description": "推奨語彙は SPEC.md §3.3。語彙外も可"
+        },
+        "energy": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5
+        },
+        "bodyParts": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "head",
+              "torso",
+              "arms",
+              "hands",
+              "hips",
+              "legs",
+              "full"
+            ]
+          },
+          "uniqueItems": true,
+          "minItems": 1
+        },
+        "locomotion": {
+          "enum": [
+            "in-place",
+            "stepping",
+            "traveling",
+            "spinning"
+          ]
+        },
+        "floorWork": {
+          "type": "boolean"
+        },
+        "airborne": {
+          "type": "boolean"
+        },
+        "fingers": {
+          "type": "boolean"
+        },
+        "expressions": {
+          "type": "boolean"
+        },
+        "lookAt": {
+          "type": "boolean"
+        },
+        "rootMotion": {
+          "type": "boolean"
+        },
+        "keywords": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "facing": {
+          "enum": [
+            "front",
+            "side",
+            "back",
+            "turning"
+          ]
+        },
+        "mood": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "cool",
+              "cute",
+              "funny",
+              "sexy",
+              "elegant",
+              "energetic",
+              "chill",
+              "festive",
+              "dramatic",
+              "retro",
+              "triumphant",
+              "sad",
+              "calm"
+            ]
+          }
+        },
+        "sections": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "intro",
+              "verse",
+              "pre-chorus",
+              "chorus",
+              "interlude",
+              "bridge",
+              "outro"
+            ]
+          }
+        },
+        "songTempo": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "slow",
+              "mid",
+              "fast"
+            ]
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "tempo": {
+      "type": "object",
+      "required": [
+        "bpm"
+      ],
+      "properties": {
+        "bpm": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "exclusiveMinimum": 0
+        },
+        "beatsPerBar": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 4
+        },
+        "firstBeat": {
+          "$ref": "#/$defs/time",
+          "default": 0
+        },
+        "firstBarBeat": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1
+        },
+        "beats": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/time"
+          },
+          "minItems": 2
+        },
+        "confidence": {
+          "$ref": "#/$defs/unit"
+        },
+        "basis": {
+          "enum": [
+            "authored",
+            "music",
+            "steps",
+            "motion"
+          ]
+        },
+        "alternatives": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "uniqueItems": true
+        }
+      },
+      "additionalProperties": true
+    },
+    "loop": {
+      "type": "object",
+      "required": [
+        "in",
+        "out"
+      ],
+      "properties": {
+        "in": {
+          "$ref": "#/$defs/time"
+        },
+        "out": {
+          "$ref": "#/$defs/time"
+        },
+        "mode": {
+          "enum": [
+            "cycle",
+            "pingpong"
+          ],
+          "default": "cycle"
+        },
+        "blend": {
+          "$ref": "#/$defs/time",
+          "default": 0
+        },
+        "beats": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "poseDiffDeg": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": true
+    },
+    "allow": {
+      "type": "object",
+      "properties": {
+        "stretch": {
+          "type": "object",
+          "required": [
+            "mode"
+          ],
+          "properties": {
+            "mode": {
+              "enum": [
+                "none",
+                "uniform",
+                "beats"
+              ]
+            },
+            "minRate": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "default": 0.8
+            },
+            "maxRate": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "default": 1.25
+            },
+            "allowHalfDouble": {
+              "type": "boolean",
+              "default": true
+            }
+          },
+          "additionalProperties": true
+        },
+        "mirror": {
+          "type": "boolean",
+          "default": true
+        },
+        "lookAt": {
+          "$ref": "#/$defs/override"
+        },
+        "expression": {
+          "$ref": "#/$defs/override"
+        },
+        "additive": {
+          "type": "boolean",
+          "default": false
+        },
+        "retimeRoot": {
+          "type": "boolean",
+          "default": true
+        },
+        "parts": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/part"
+          },
+          "additionalProperties": {
+            "enum": [
+              "keep",
+              "replaceable"
+            ]
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "events": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "t",
+          "type"
+        ],
+        "properties": {
+          "t": {
+            "$ref": "#/$defs/time"
+          },
+          "type": {
+            "anyOf": [
+              {
+                "enum": [
+                  "contact",
+                  "lift",
+                  "hit",
+                  "apex",
+                  "cue"
+                ]
+              },
+              {
+                "$ref": "#/$defs/custom"
+              }
+            ]
+          },
+          "side": {
+            "$ref": "#/$defs/side"
+          },
+          "limb": {
+            "enum": [
+              "foot",
+              "hand",
+              "knee"
+            ],
+            "default": "foot"
+          },
+          "name": {
+            "type": "string"
+          },
+          "hold": {
+            "$ref": "#/$defs/time"
+          },
+          "strength": {
+            "$ref": "#/$defs/unit"
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "type": {
+                  "enum": [
+                    "contact",
+                    "lift"
+                  ]
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "side"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "type": {
+                  "const": "cue"
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "name"
+              ]
+            }
+          }
+        ],
+        "additionalProperties": true
+      }
+    },
+    "ranges": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "from",
+          "to",
+          "type"
+        ],
+        "properties": {
+          "from": {
+            "$ref": "#/$defs/time"
+          },
+          "to": {
+            "$ref": "#/$defs/time"
+          },
+          "type": {
+            "anyOf": [
+              {
+                "enum": [
+                  "footLock",
+                  "handIK",
+                  "noStretch",
+                  "interruptible",
+                  "phrase"
+                ]
+              },
+              {
+                "$ref": "#/$defs/custom"
+              }
+            ]
+          },
+          "side": {
+            "$ref": "#/$defs/side"
+          },
+          "target": {
+            "enum": [
+              "floor",
+              "hips",
+              "chest",
+              "head",
+              "otherHand",
+              "world"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "energy": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 5
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "type": {
+                  "enum": [
+                    "footLock",
+                    "handIK"
+                  ]
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "side"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "type": {
+                  "const": "phrase"
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "name"
+              ]
+            }
+          }
+        ],
+        "additionalProperties": true
+      }
+    },
+    "curves": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^((footLock|handIK)\\.(left|right)|noStretch|interruptible|x-[a-zA-Z0-9.-]+)$"
+      },
+      "additionalProperties": {
+        "type": "array",
+        "minItems": 2,
+        "items": {
+          "type": "array",
+          "prefixItems": [
+            {
+              "$ref": "#/$defs/time"
+            },
+            {
+              "$ref": "#/$defs/unit"
+            }
+          ],
+          "minItems": 2,
+          "maxItems": 2
+        }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "propertyNames": {
+        "enum": [
+          "tags",
+          "tempo",
+          "loop",
+          "allow",
+          "events",
+          "ranges",
+          "curves",
+          "root",
+          "poses",
+          "retarget"
+        ]
+      },
+      "additionalProperties": {
+        "enum": [
+          "auto",
+          "model",
+          "human"
+        ]
+      }
+    },
+    "x": {
+      "type": "object",
+      "description": "ツール独自の情報。キーはツール名。"
+    },
+    "root": {
+      "type": "object",
+      "properties": {
+        "netTravel": {
+          "type": "number",
+          "minimum": 0
+        },
+        "maxTravel": {
+          "type": "number",
+          "minimum": 0
+        },
+        "netTurnDeg": {
+          "type": "number"
+        },
+        "turnRangeDeg": {
+          "type": "number",
+          "minimum": 0
+        },
+        "hipsBounce": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": true
+    },
+    "poses": {
+      "type": "object",
+      "properties": {
+        "start": {
+          "enum": [
+            "stand",
+            "crouch",
+            "kneel",
+            "sit",
+            "lie",
+            "floor",
+            "air"
+          ]
+        },
+        "end": {
+          "enum": [
+            "stand",
+            "crouch",
+            "kneel",
+            "sit",
+            "lie",
+            "floor",
+            "air"
+          ]
+        },
+        "startSupport": {
+          "enum": [
+            "both",
+            "left",
+            "right",
+            "none"
+          ]
+        },
+        "endSupport": {
+          "enum": [
+            "both",
+            "left",
+            "right",
+            "none"
+          ]
+        },
+        "startArms": {
+          "enum": [
+            "down",
+            "front",
+            "up",
+            "wide",
+            "hips",
+            "other"
+          ]
+        },
+        "endArms": {
+          "enum": [
+            "down",
+            "front",
+            "up",
+            "wide",
+            "hips",
+            "other"
+          ]
+        }
+      },
+      "additionalProperties": true
+    },
+    "retarget": {
+      "type": "object",
+      "properties": {
+        "restPose": {
+          "enum": [
+            "T",
+            "A",
+            "other"
+          ]
+        },
+        "sourceHipHeight": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "floorAligned": {
+          "type": "boolean"
+        },
+        "checkedOn": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "time": {
+      "type": "number",
+      "minimum": 0
+    },
+    "unit": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "slug": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_.-]*$"
+    },
+    "side": {
+      "enum": [
+        "left",
+        "right"
+      ]
+    },
+    "custom": {
+      "type": "string",
+      "pattern": "^x-[a-zA-Z0-9.-]+$"
+    },
+    "override": {
+      "enum": [
+        "keep",
+        "blend",
+        "override"
+      ]
+    },
+    "part": {
+      "enum": [
+        "head",
+        "torso",
+        "leftArm",
+        "rightArm",
+        "leftFingers",
+        "rightFingers",
+        "leftLeg",
+        "rightLeg",
+        "upperBody",
+        "lowerBody"
+      ]
+    },
+    "person": {
+      "type": "object",
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string",
+          "format": "uri"
+        }
+      },
+      "additionalProperties": true
+    }
+  }
+}

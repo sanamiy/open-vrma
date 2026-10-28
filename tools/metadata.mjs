@@ -77,7 +77,9 @@ const CHECKED = {
 // 足の接地の間隔から「動きの拍」を測る（左右どちらかが着いた時刻を1拍とする）
 // 間隔のばらつきが小さく、4歩以上あるときだけ使う。倍・半分も候補として返す
 export function stepTempo(contacts, D, loop = false) {
-  const on = [...(contacts?.left ?? []), ...(contacts?.right ?? [])].map(([f]) => f).filter(t => t > 0 && t < D).sort((x, y) => x - y);
+  // 0 秒から始まる接地は、ループで最後のコマにその足が浮いていれば、つなぎ目での着地なので数える
+  const starts = side => (contacts?.[side] ?? []).filter(([f], i, a) => f > 0 || (loop && a[a.length - 1][1] < D - 0.05)).map(([f]) => f);
+  const on = [...starts('left'), ...starts('right')].filter(t => t < D).sort((x, y) => x - y);
   const iv = on.slice(1).map((t, i) => t - on[i]);
   if (loop && on.length) iv.push(on[0] + D - on[on.length - 1]);  // ループなら最後から最初への間隔も1歩
   const ivs = iv.filter(d => d >= 0.2 && d <= 1.5);

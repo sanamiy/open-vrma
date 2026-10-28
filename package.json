@@ -6,9 +6,12 @@
   "private": true,
   "license": "MIT",
   "scripts": {
-    "build": "bash tools/build.sh work 4"
+    "build": "bash tools/build.sh work 4",
+    "test": "node spec/validate.mjs spec/examples/salsa-basic.motion.json spec/examples/minimal.motion.json && ! node spec/validate.mjs spec/examples/broken.motion.json"
   },
   "dependencies": {
+    "ajv": "8.17.1",
+    "ajv-formats": "3.0.1",
     "three": "0.186.1"
   }
 }

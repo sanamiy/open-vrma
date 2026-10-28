@@ -4,7 +4,7 @@
 #   <作業フォルダ>/src/  元データ（CMU の BVH ミラーと Quaternius の zip）を置く・取ってくる
 #   <作業フォルダ>/dataset/  できあがり（cmu/ quaternius/ に .vrma と .motion.json、catalog.jsonl catalog.csv）
 #   <作業フォルダ>/analysis/ メタデータの元になる解析値（配らない）
-# 環境変数 MOTION_META_VALIDATOR に Motion Meta の validate.mjs を渡すと、通らないものを除外する
+# Motion Meta の検証（spec/validate.mjs）に通らないものは除外する。別の validate.mjs を使うなら MOTION_META_VALIDATOR に渡す
 set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 WORK=$(mkdir -p "${1:?作業フォルダを指定してください}" && cd "$1" && pwd)
@@ -49,10 +49,14 @@ for f in sorted(glob.glob(sys.argv[1] + '/Sequence-*/*/README.md')):
         if m: rows.append(dict(id=m[1], frames=int(m[3]), desc=m[4].strip(), category=cat))
 json.dump(rows, open(sys.argv[2], 'w'), ensure_ascii=False)
 EOF
-node "$HERE/metadata.mjs" "$WORK/analysis" "$OUT" "$WORK/cmu-index.json" ${MOTION_META_VALIDATOR:-}
+node "$HERE/metadata.mjs" "$WORK/analysis" "$OUT" "$WORK/cmu-index.json" "${MOTION_META_VALIDATOR:-$HERE/../spec/validate.mjs}"
 
 # 回転を 16bit にして容量を約半分にする（まだ float のものだけ）
 node "$HERE/quantize.mjs" "$OUT"
 
 # 一覧の parquet（pyarrow があれば。Hugging Face の表示・検索用）
 "${PYTHON:-python3}" "$HERE/catalog_parquet.py" "$OUT/catalog.jsonl" "$OUT/catalog.parquet" || echo "parquet は作らなかった（pyarrow が無い）"
+
+# データセットの README.md と LICENSE.md
+node "$HERE/card.mjs" "$HERE/../dataset-card.md" "$OUT"
+cp "$HERE/../LICENSE.dataset.md" "$OUT/LICENSE.md"
