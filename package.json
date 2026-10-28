@@ -1,0 +1,14 @@
+{
+  "name": "open-vrma",
+  "version": "0.1.0",
+  "description": "再配布できる人型モーションを VRM Animation（.vrma）に変換し、Motion Meta のメタデータと一覧を作るツール",
+  "type": "module",
+  "private": true,
+  "license": "MIT",
+  "scripts": {
+    "build": "bash tools/build.sh work 4"
+  },
+  "dependencies": {
+    "three": "0.186.1"
+  }
+}
