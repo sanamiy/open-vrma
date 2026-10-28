@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import { BVHLoader } from 'three/examples/jsm/loaders/BVHLoader.js';
 import { writeVRMA, continuous, PARENT, THREE } from './vrma.mjs';
-import { analyze } from './analyze.mjs';
+import { analyze, addSoles, floorHeight } from './analyze.mjs';
 
 const [,, inFile, outVrma, outJson, fpsS = '30'] = process.argv;
 const UNIT = 0.0254 / 0.45; // CMU の ASF 単位 → m
@@ -27,6 +27,7 @@ pose(0);
 const restInv = Object.fromEntries(names.map(n => [n, wq(n).invert()]));
 const restPos = Object.fromEntries(names.map(n => [n, wp(n)]));
 const floor0 = Math.min(endSite('leftToes').y, endSite('rightToes').y);
+const restToe = { left: endSite('leftToes').y - floor0, right: endSite('rightToes').y - floor0 };
 const center = restPos.hips.clone(); center.y = floor0;
 for (const n of names) restPos[n].sub(center);
 
@@ -51,14 +52,15 @@ for (let i = 0; i < frameCount; i++) {
   track.rightToe.push(endSite('rightToes').sub(center).toArray());
 }
 for (const n of names) continuous(rot[n]);
-// 床: 全体の足先の最下点付近を 0 に
-const toeYs = [...track.leftToe, ...track.rightToe].map(p => p[1]).sort((a, b) => a - b);
-const floor = toeYs[Math.floor(toeYs.length * 0.02)];
+// 床: 止まっている足の足裏の高さから決めて 0 に
+addSoles(track, { leftFoot: restPos.leftFoot.y, rightFoot: restPos.rightFoot.y, leftToe: restToe.left, rightToe: restToe.right });
+const floor = floorHeight(track, fps);
 for (let i = 0; i < frameCount; i++) hipsPos[i * 3 + 1] -= floor;
 for (const k in track) for (const p of track[k]) p[1] -= floor;
 
 const id = inFile.split('/').pop().replace(/\.bvh$/i, '');
 fs.writeFileSync(outVrma, writeVRMA({ bones: names, restPos, fps, frameCount, rot, hipsPos, name: id }));
+if (process.env.DUMP_TRACK) fs.writeFileSync(process.env.DUMP_TRACK, JSON.stringify({ fps, track }));
 const metrics = analyze({ fps, frameCount, rot, bones: names, track, hipRest: restPos.hips.y });
 fs.writeFileSync(outJson, JSON.stringify({ id, fps, frames: frameCount, duration: +((frameCount - 1) / fps).toFixed(2), ...metrics }, null, 1));
 console.error(id, frameCount, 'frames', metrics);

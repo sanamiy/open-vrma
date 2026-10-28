@@ -30,17 +30,36 @@ function tempo(sig, fps) {
   return { bpm, beatConfidence: r2(best), firstBeat: +((bestPhase + 1) / fps).toFixed(3) };
 }
 
-// 足の接地: つま先が床から 5cm 以内で、水平の速さが 0.4m/s 未満の間。0.1 秒未満の接地・離地はならす
-function contacts(toe, fps) {
-  const n = toe.length, on = new Array(n);
-  for (let i = 0; i < n; i++) {
-    const j = Math.max(0, i - 1), k = Math.min(n - 1, i + 1);
-    const v = Math.hypot(toe[k][0] - toe[j][0], toe[k][2] - toe[j][2]) * fps / Math.max(1, k - j);
-    on[i] = toe[i][1] < 0.05 && v < 0.4;
-  }
-  const minRun = Math.round(fps * 0.1);
+// 足裏の高さ: 足首とつま先のうち、基準姿勢（Tポーズで床に立った状態）での高さを引いて低いほう。
+// つま先の位置はデータによってずれる（CMU では足首より上にあることもある）ので、両方を見る
+// rest は Tポーズでの床からの高さ { leftFoot, rightFoot, leftToe, rightToe }
+export function addSoles(track, rest) {
+  for (const s of ['left', 'right']) track[s + 'Sole'] = track[s + 'Toe'].map((t, i) => [t[0], Math.min(track[s + 'Foot'][i][1] - rest[s + 'Foot'], t[1] - rest[s + 'Toe']), t[2]]);
+}
+// 床の高さ: 足が止まっているコマの足裏の高さの下から 10%（止まった足がなければ全体の下から 2%）
+export function floorHeight(track, fps) {
+  const still = [], all = [];
+  for (const s of ['leftSole', 'rightSole']) footVel(track[s], fps).forEach((v, i) => { const y = track[s][i][1]; all.push(y); if (Math.hypot(v[0], v[1]) < 0.3) still.push(y); });
+  const src = still.length >= 10 ? still : all; src.sort((x, y) => x - y);
+  return src[Math.floor(src.length * (still.length >= 10 ? 0.1 : 0.02))];
+}
+// 足の水平の速度
+const footVel = (toe, fps) => toe.map((_, i) => { const j = Math.max(0, i - 1), k = Math.min(toe.length - 1, i + 1), d = fps / Math.max(1, k - j); return [(toe[k][0] - toe[j][0]) * d, (toe[k][2] - toe[j][2]) * d]; });
+const median = a => { const s = [...a].sort((x, y) => x - y); return s.length ? s[s.length >> 1] : 0; };
+// 床の速度: 足が床近くにあるコマの速度の中央値。その場で歩くループ（腰が進まない）では床がベルトのように後ろへ流れるので、
+// 軸足はこの速度で動く。普通のクリップではほぼ 0
+function groundVelocity(toes, fps) {
+  const vs = toes.flatMap(t => footVel(t, fps).filter((_, i) => t[i][1] < 0.05));
+  return [median(vs.map(v => v[0])), median(vs.map(v => v[1]))];
+}
+// 足の接地: 足裏が床から 5cm 以内で、床に対する水平の速さが 1m/s 未満の間（走りの着地は足が転がるので 0.4m/s では取りこぼす）。
+// 0.1 秒未満の離地は埋め、0.067 秒未満の接地は消す
+function contacts(toe, fps, ground = [0, 0]) {
+  const n = toe.length, on = new Array(n), vel = footVel(toe, fps);
+  for (let i = 0; i < n; i++) on[i] = toe[i][1] < 0.05 && Math.hypot(vel[i][0] - ground[0], vel[i][1] - ground[1]) < 1.0;
+  const minRun = { false: Math.round(fps * 0.1), true: Math.round(fps * 0.067) };
   for (const val of [false, true]) { // 短い離地を埋めてから、短い接地を消す
-    let i = 0; while (i < n) { if (on[i] !== val) { i++; continue; } let j = i; while (j < n && on[j] === val) j++; if (j - i < minRun && i > 0 && j < n) for (let k = i; k < j; k++) on[k] = !val; i = j; }
+    let i = 0; while (i < n) { if (on[i] !== val) { i++; continue; } let j = i; while (j < n && on[j] === val) j++; if (j - i < minRun[val] && i > 0 && j < n) for (let k = i; k < j; k++) on[k] = !val; i = j; }
   }
   const spans = []; let i = 0;
   while (i < n) { if (!on[i]) { i++; continue; } let j = i; while (j < n && on[j]) j++; spans.push([+(i / fps).toFixed(3), +((j - 1) / fps).toFixed(3)]); i = j; }
@@ -48,10 +67,13 @@ function contacts(toe, fps) {
 }
 
 // 1コマの姿勢: 腰の高さ・接地・腕の位置から、つなぎ目で比べるための分類をする
-function poseAt(track, i, h, yawRad) {
-  const lt = track.leftToe[i][1] < 0.06 || track.leftFoot[i][1] < 0.14, rt = track.rightToe[i][1] < 0.06 || track.rightFoot[i][1] < 0.14;
-  const hy = track.hips[i][1] / h;
-  const pose = !lt && !rt && hy > 0.95 ? 'air' : hy > 0.85 ? 'stand' : hy > 0.55 ? 'crouch' : track.head[i][1] / h < 0.6 ? (hy < 0.3 ? 'lie' : 'floor') : hy < 0.4 ? 'sit' : 'kneel';
+// elevated[i]: 両足が床から離れている状態が 0.8 秒より長く続く区間（台・ボール・椅子の上など）。跳んでいるのではないので、
+// 空中とはせず、低いほうの足からの腰の高さで姿勢を決める
+function poseAt(track, i, h, yawRad, elevated) {
+  const lt = track.leftSole[i][1] < 0.06, rt = track.rightSole[i][1] < 0.06;
+  const base = elevated?.[i] ? Math.min(track.leftSole[i][1], track.rightSole[i][1]) : 0;
+  const hy = (track.hips[i][1] - base) / h;
+  const pose = !lt && !rt && !elevated?.[i] && hy > 0.95 ? 'air' : hy > 0.85 ? 'stand' : hy > 0.55 ? 'crouch' : track.head[i][1] / h < 0.6 ? (hy < 0.3 ? 'lie' : 'floor') : hy < 0.4 ? 'sit' : 'kneel';
   const support = lt && rt ? 'both' : lt ? 'left' : rt ? 'right' : 'none';
   // 腕: 体の向きにそろえた座標で、手が肩より上・前・横・腰のそば・下のどれか
   const c = Math.cos(-yawRad), s = Math.sin(-yawRad), hip = track.hips[i];
@@ -69,6 +91,7 @@ function poseAt(track, i, h, yawRad) {
 }
 
 export function analyze({ fps, frameCount: n, rot, bones, track, hipRest }) {
+  if (!track.leftSole) throw new Error('track.leftSole がない（addSoles を先に呼ぶ）');
   const h = hipRest;
   const hip = track.hips;
   let path = 0; for (let i = 1; i < n; i++) path += Math.hypot(hip[i][0] - hip[i - 1][0], hip[i][2] - hip[i - 1][2]);
@@ -84,7 +107,9 @@ export function analyze({ fps, frameCount: n, rot, bones, track, hipRest }) {
   const sig = []; for (let i = 1; i < n; i++) sig.push(ends.reduce((a, k) => a + dist(track[k][i], track[k][i - 1]) * fps, 0) + Math.abs(hip[i][1] - hip[i - 1][1]) * fps * 2);
   const energy = sig.reduce((a, b) => a + b, 0) / (sig.length || 1) / ends.length;
   let air = 0, low = 0;
-  for (let i = 0; i < n; i++) { if (track.leftToe[i][1] > 0.08 && track.rightToe[i][1] > 0.08) air++; if (hip[i][1] < h * 0.6) low++; }
+  const off = Array.from({ length: n }, (_, i) => track.leftSole[i][1] > 0.08 && track.rightSole[i][1] > 0.08), elevated = new Array(n).fill(false);
+  for (let i = 0; i < n;) { if (!off[i]) { i++; continue; } let j = i; while (j < n && off[j]) j++; if (j - i > 0.8 * fps) elevated.fill(true, i, j); else air += j - i; i = j; }
+  for (let i = 0; i < n; i++) if (hip[i][1] < h * 0.6) low++;
   // 腰の水平移動の最大・向きの振れ幅・上下の振れ幅（すべて腰の高さ倍か度）
   let maxTravel = 0; for (let i = 0; i < n; i++) maxTravel = Math.max(maxTravel, Math.hypot(hip[i][0] - hip[0][0], hip[i][2] - hip[0][2]));
   let cum = 0, cmin = 0, cmax = 0, pv = yaw(0); for (let i = 1; i < n; i++) { let d = yaw(i) - pv; d = Math.atan2(Math.sin(d), Math.cos(d)); cum += d; pv = yaw(i); cmin = Math.min(cmin, cum); cmax = Math.max(cmax, cum); }
@@ -101,7 +126,8 @@ export function analyze({ fps, frameCount: n, rot, bones, track, hipRest }) {
   };
   const tot = Object.values(share).reduce((a, b) => a + b, 0) || 1;
   for (const k in share) share[k] = r2(share[k] / tot);
-  const p0 = poseAt(track, 0, h, yaw(0)), p1 = poseAt(track, n - 1, h, yaw(n - 1));
+  const ground = groundVelocity([track.leftSole, track.rightSole], fps);
+  const p0 = poseAt(track, 0, h, yaw(0), elevated), p1 = poseAt(track, n - 1, h, yaw(n - 1), elevated);
   let loopDiff = 0, cnt = 0; for (const b of bones) if (rot[b] && b !== 'hips') { loopDiff += ang(rot[b], 0, (n - 1) * 4); cnt++; }
   loopDiff = loopDiff / cnt * 180 / Math.PI;
   return {
@@ -116,6 +142,6 @@ export function analyze({ fps, frameCount: n, rot, bones, track, hipRest }) {
     root: { netTravel: r2(net / h), maxTravel: r2(maxTravel / h), netTurnDeg: Math.round(turn * 180 / Math.PI), turnRangeDeg: Math.round((cmax - cmin) * 180 / Math.PI), hipsBounce: r2((pct(0.95) - pct(0.05)) / h) },
     facing, bodyShare: share,
     poses: { start: p0.pose, end: p1.pose, startSupport: p0.support, endSupport: p1.support, startArms: p0.arms, endArms: p1.arms },
-    contacts: { left: contacts(track.leftToe, fps), right: contacts(track.rightToe, fps) },
+    contacts: { left: contacts(track.leftSole, fps, ground), right: contacts(track.rightSole, fps, ground) },
   };
 }

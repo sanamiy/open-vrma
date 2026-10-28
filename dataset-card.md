@@ -56,8 +56,8 @@ new THREE.AnimationMixer(vrm.scene).clipAction(clip).play();
 ### 取得
 
 ```bash
-hf download {{REPO}} --repo-type dataset --include "catalog.csv"     # 一覧だけ
-hf download {{REPO}} --repo-type dataset --include "cmu/60_*.vrma"   # 必要な分だけ
+hf download Sanami/open-vrma --repo-type dataset --include "catalog.csv"     # 一覧だけ
+hf download Sanami/open-vrma --repo-type dataset --include "cmu/60_*.vrma"   # 必要な分だけ
 ```
 
 ## メタデータ（.motion.json）と一覧の列

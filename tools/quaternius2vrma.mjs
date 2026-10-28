@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { writeVRMA, continuous, PARENT, THREE } from './vrma.mjs';
-import { analyze } from './analyze.mjs';
+import { analyze, addSoles } from './analyze.mjs';
 
 const [,, inFile, rig, outDir, fpsS = '30'] = process.argv;
 const fingers = (fmt) => {
@@ -49,6 +49,7 @@ at(tpose, 0);
 const restInv = Object.fromEntries(names.map(n => [n, wq(n).invert()]));
 const restPos = Object.fromEntries(names.map(n => [n, wp(n)]));
 const floor0 = Math.min(tip('leftToes').y, tip('rightToes').y);
+const restToe = { left: tip('leftToes').y - floor0, right: tip('rightToes').y - floor0 };
 const center = restPos.hips.clone(); center.y = floor0;
 for (const n of names) restPos[n].sub(center);
 console.error(rig, 'T-pose arm dir', wp('leftHand').sub(wp('leftUpperArm')).normalize().toArray().map(v => v.toFixed(2)).join(','), 'hips', restPos.hips.y.toFixed(2));
@@ -75,6 +76,8 @@ for (const clip of gltf.animations) {
   for (const n of names) continuous(rot[n]);
   const id = `${rig}_${clip.name}`;
   fs.writeFileSync(path.join(outDir, id + '.vrma'), writeVRMA({ bones: names, restPos, fps, frameCount, rot, hipsPos, name: clip.name }));
+  // 手付けのアニメーションは床が 0 なので、床の高さは合わせない
+  addSoles(track, { leftFoot: restPos.leftFoot.y, rightFoot: restPos.rightFoot.y, leftToe: restToe.left, rightToe: restToe.right });
   const metrics = analyze({ fps, frameCount, rot, bones: names, track, hipRest: restPos.hips.y });
   fs.writeFileSync(path.join(outDir, id + '.json'), JSON.stringify({ id, fps, frames: frameCount, duration: +((frameCount - 1) / fps).toFixed(2), ...metrics }, null, 1));
 }

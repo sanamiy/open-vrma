@@ -7,7 +7,8 @@ import path from 'node:path';
 const [,, ANALYSIS, DIR, cmuIndexPath, validatorPath] = process.argv;
 const cmuIndex = Object.fromEntries(JSON.parse(fs.readFileSync(cmuIndexPath, 'utf8')).map(r => [r.id, r]));
 const check = validatorPath ? (await import(path.resolve(validatorPath))).check : null;
-const CONVERTER = 'open-vrma@0.1';
+const CONVERTER = 'open-vrma';
+const VERSION = '0.1';
 
 // 素材ごとのライセンスと出典（そのまま貼れるクレジット文を必ず入れる）
 const SOURCES = {
@@ -18,7 +19,7 @@ const SOURCES = {
       url: 'http://mocap.cs.cmu.edu/faqs.php',
       attribution: 'The data used in this project was obtained from mocap.cs.cmu.edu. The database was created with funding from NSF EIA-0196217.',
       authors: [{ name: 'Carnegie Mellon University Graphics Lab', url: 'http://mocap.cs.cmu.edu/' }, { name: 'Bruce Hahne (BVH conversion, cgspeed)' }],
-      source: { kind: 'converted', url: 'http://mocap.cs.cmu.edu/', originalId: id, originalFormat: 'bvh', converter: `${CONVERTER}/cmu2vrma`, capture: 'mocap' },
+      source: { kind: 'mocap', url: 'http://mocap.cs.cmu.edu/', originalId: id, originalFormat: 'bvh', converter: `${CONVERTER}/cmu2vrma@${VERSION}` },
     }),
     sourceFps: 120,
   },
@@ -29,7 +30,7 @@ const SOURCES = {
       url: 'https://creativecommons.org/publicdomain/zero/1.0/',
       attribution: 'Universal Animation Library by Quaternius (CC0 1.0)',
       authors: [{ name: 'Quaternius', url: 'https://quaternius.com/' }],
-      source: { kind: 'converted', url: 'https://quaternius.com/packs/universalanimationlibrary.html', originalId: id, originalFormat: 'glb', converter: `${CONVERTER}/quaternius2vrma`, capture: 'keyframe' },
+      source: { kind: 'keyframe', url: 'https://quaternius.com/packs/universalanimationlibrary.html', originalId: id, originalFormat: 'glb', converter: `${CONVERTER}/quaternius2vrma@${VERSION}` },
     }),
   },
   ual2: {
@@ -39,7 +40,7 @@ const SOURCES = {
       url: 'https://creativecommons.org/publicdomain/zero/1.0/',
       attribution: 'Universal Animation Library 2 by Quaternius (CC0 1.0)',
       authors: [{ name: 'Quaternius', url: 'https://quaternius.com/' }],
-      source: { kind: 'converted', url: 'https://quaternius.itch.io/universal-animation-library-2', originalId: id, originalFormat: 'glb', converter: `${CONVERTER}/quaternius2vrma`, capture: 'keyframe' },
+      source: { kind: 'keyframe', url: 'https://quaternius.itch.io/universal-animation-library-2', originalId: id, originalFormat: 'glb', converter: `${CONVERTER}/quaternius2vrma@${VERSION}` },
     }),
   },
 };
@@ -49,7 +50,7 @@ const KIND = [
   ['dance', /danc|salsa|charleston|charelston|ballet|pirouette|arabesque|jete|breakdance|break ?dance|helicopter|fancyfootwork|lambada|bollywood|indian|twist dance|moonwalk|jackson|chicken dance|disco|jig|^dance_loop$/i],
   ['acrobatics', /cartwheel|flip|summersult|somersault|hand ?spring|handstand|acrobat/i],
   ['gesture', /wave|waving|clap|cheer|point|bow|salute|shrug|nod|^yes$|idle_no|hand signal|gesture|beckon|talk|phone|applaud|conduct|direct traffic|signal|nursery rhyme|teapot|peek ?a ?boo|laugh|cry|scared|happy|sad|angry|curtsey|mope|surprised|emotion|pantomime|story|communication/i],
-  ['sit', /sit|sitting|kneel|lay|lie down|seat/i],
+  ['sit', /\bsit|kneel|\blay\b|lay down|lie down|\bseat|stool|chair/i],
   ['jump', /jump|hop|leap/i],
   ['run', /run|jog|sprint/i],
   ['walk', /walk|march|wander|stroll|step|strut|navigate|stairs|tiptoe/i],
@@ -72,6 +73,24 @@ const CHECKED = {
   cmu_60_01: ['vrm1-sample', 'maru', 'oomofu'], cmu_05_02: ['vrm1-sample'], cmu_85_12: ['vrm1-sample'],
   ual1_dance_loop: ['vrm1-sample'], ual1_walk_loop: ['vrm1-sample'], ual2_idle_foldarms_loop: ['vrm1-sample'], ual2_idle_talkingphone_loop: ['vrm1-sample'],
 };
+
+// 足の接地の間隔から「動きの拍」を測る（左右どちらかが着いた時刻を1拍とする）
+// 間隔のばらつきが小さく、4歩以上あるときだけ使う。倍・半分も候補として返す
+export function stepTempo(contacts, D, loop = false) {
+  const on = [...(contacts?.left ?? []), ...(contacts?.right ?? [])].map(([f]) => f).filter(t => t > 0 && t < D).sort((x, y) => x - y);
+  const iv = on.slice(1).map((t, i) => t - on[i]);
+  if (loop && on.length) iv.push(on[0] + D - on[on.length - 1]);  // ループなら最後から最初への間隔も1歩
+  const ivs = iv.filter(d => d >= 0.2 && d <= 1.5);
+  if (ivs.length < 2) return null;
+  const sorted = [...ivs].sort((x, y) => x - y), med = sorted[sorted.length >> 1];
+  const close = ivs.filter(d => Math.abs(d - med) / med < 0.2);
+  const mean = close.reduce((x, y) => x + y, 0) / close.length;
+  const confidence = +(close.length / ivs.length).toFixed(2);
+  if (close.length < 2 || confidence < 0.6) return null;
+  const bpm = +(60 / mean).toFixed(1);
+  const alternatives = [bpm * 2, bpm / 2].map(x => +x.toFixed(1)).filter(x => x >= 40 && x <= 240);
+  return { bpm, firstBeat: +(on[0] % mean).toFixed(3), confidence, alternatives };
+}
 
 function build(src, a) {
   const S = SOURCES[src];
@@ -98,7 +117,13 @@ function build(src, a) {
   if (upper) parts = parts.filter(p => p !== 'legs' && p !== 'hips');
   if (!parts.length) parts = upper ? ['arms'] : ['full'];
   if (parts.includes('legs') && (parts.includes('arms') || !upper)) parts = ['full'];
-  const confident = a.bpm != null && a.beatConfidence >= 0.3;
+  const steps = stepTempo(a.contacts, a.duration, a.loopPoseDiffDeg <= 10);
+  const motionOk = a.bpm != null && a.beatConfidence >= 0.3;
+  const confident = !!steps || motionOk;
+  const bpm = steps ? steps.bpm : a.bpm;
+  const tempo = steps ? { bpm, beatsPerBar: 4, firstBeat: steps.firstBeat, confidence: steps.confidence, basis: 'steps', alternatives: steps.alternatives }
+    : motionOk ? { bpm, beatsPerBar: 4, firstBeat: Math.min(a.firstBeat ?? 0, a.duration), confidence: a.beatConfidence, basis: 'motion', alternatives: [bpm * 2, bpm / 2].map(x => +x.toFixed(1)).filter(x => x >= 40 && x <= 240) }
+    : { bpm: null, confidence: Math.min(a.beatConfidence ?? 0, 1) };
 
   // 接地 → contact / lift と footLock
   const events = [], ranges = [];
@@ -125,9 +150,9 @@ function build(src, a) {
       rootMotion: src === 'cmu' || /_RM$/.test(name),
       ...(keywords.length ? { keywords } : {}),
     },
-    tempo: confident ? { bpm: a.bpm, beatsPerBar: 4, firstBeat: Math.min(a.firstBeat ?? 0, D), confidence: a.beatConfidence } : { bpm: null, confidence: a.beatConfidence ?? 0 },
-    ...(loopable ? { loop: { in: 0, out: D, mode: 'cycle', blend: +Math.min(0.1, D / 4).toFixed(3), ...(confident ? { beats: Math.max(1, Math.round(D * a.bpm / 60)) } : {}), poseDiffDeg: a.loopPoseDiffDeg } } : {}),
-    ...(kind === 'dance' && confident && a.beatConfidence >= 0.5 ? { allow: { stretch: { mode: 'beats' } } } : {}),
+    tempo,
+    ...(loopable ? { loop: { in: 0, out: D, mode: 'cycle', blend: +Math.min(0.1, D / 4).toFixed(3), ...(confident && Math.abs(D * bpm / 60 - Math.round(D * bpm / 60)) <= 0.25 ? { beats: Math.max(1, Math.round(D * bpm / 60)) } : {}), poseDiffDeg: a.loopPoseDiffDeg } } : {}),
+    ...(kind === 'dance' && tempo.confidence >= 0.5 ? { allow: { stretch: { mode: 'beats' } } } : {}),
     ...(events.length ? { events } : {}),
     ...(ranges.length ? { ranges } : {}),
     root: a.root,
@@ -149,7 +174,7 @@ for (const src of Object.keys(SOURCES)) {
     const vrma = `${SOURCES[src].dir}/${base}.vrma`;
     if (!fs.existsSync(path.join(DIR, vrma))) { console.error('VRMA が無い:', vrma); bad++; continue; }
     const errs = check ? check(m) : [];
-    if (errs.length) { console.error('除外（仕様の検証に通らない）:', m.id, errs.join(' / ')); fs.rmSync(path.join(DIR, vrma), { force: true }); bad++; continue; }
+    if (errs.length) { console.error('除外（仕様の検証に通らない）:', m.id, errs.join(' / ')); const rej = path.join(DIR, '..', 'rejected'); fs.mkdirSync(rej, { recursive: true }); if (fs.existsSync(path.join(DIR, vrma))) fs.renameSync(path.join(DIR, vrma), path.join(rej, path.basename(vrma))); bad++; continue; }
     fs.writeFileSync(path.join(DIR, vrma.replace(/\.vrma$/, '.motion.json')), JSON.stringify(m, null, 1) + '\n');
     rows.push({ file: vrma, m });
   }
@@ -161,6 +186,8 @@ const flat = ({ file, m }) => ({
   license: m.license.spdx, attribution: m.license.attribution,
   ...m.tags,
   bpm: m.tempo?.bpm ?? null,
+  tempoBasis: m.tempo?.basis ?? null,
+  tempoAlternatives: m.tempo?.alternatives ?? [],
   tempoBand: m.tempo?.bpm == null ? null : m.tempo.bpm < 90 ? 'slow' : m.tempo.bpm <= 120 ? 'mid' : 'fast',
   loopable: !!m.loop, loopBeats: m.loop?.beats ?? null, hasTiming: !!(m.events?.length || m.ranges?.length),
   travel: m.root?.netTravel ?? null, turnDeg: m.root?.netTurnDeg ?? null, startPose: m.poses?.start ?? null, endPose: m.poses?.end ?? null,
@@ -174,5 +201,5 @@ fs.writeFileSync(path.join(DIR, 'catalog.csv'), [cols.join(','), ...flatRows.map
 
 const count = k => Object.entries(flatRows.reduce((acc, r) => { for (const x of [].concat(r[k])) acc[x] = (acc[x] || 0) + 1; return acc; }, {})).sort((a, b) => b[1] - a[1]);
 console.log(flatRows.length, 'motions', (flatRows.reduce((s, r) => s + r.duration, 0) / 3600).toFixed(2), 'h', bad ? `（${bad}本は除外）` : '');
-for (const k of ['license', 'kind', 'genre', 'energy', 'tempoBand', 'bodyParts', 'locomotion', 'facing', 'loopable', 'hasTiming', 'startPose']) console.log(k, JSON.stringify(count(k)));
+for (const k of ['license', 'kind', 'genre', 'energy', 'tempoBand', 'tempoBasis', 'bodyParts', 'locomotion', 'facing', 'loopable', 'hasTiming', 'startPose']) console.log(k, JSON.stringify(count(k)));
 process.exit(bad && !flatRows.length ? 1 : 0);

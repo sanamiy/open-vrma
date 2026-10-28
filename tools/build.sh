@@ -53,3 +53,6 @@ node "$HERE/metadata.mjs" "$WORK/analysis" "$OUT" "$WORK/cmu-index.json" ${MOTIO
 
 # 回転を 16bit にして容量を約半分にする（まだ float のものだけ）
 node "$HERE/quantize.mjs" "$OUT"
+
+# 一覧の parquet（pyarrow があれば。Hugging Face の表示・検索用）
+"${PYTHON:-python3}" "$HERE/catalog_parquet.py" "$OUT/catalog.jsonl" "$OUT/catalog.parquet" || echo "parquet は作らなかった（pyarrow が無い）"
