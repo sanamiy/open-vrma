@@ -1,5 +1,6 @@
-// Quaternius Universal Animation Library (GLB) → 動きごとの VRMA + 解析値（A_TPose をレストの Tポーズとして使う）
-// node quaternius2vrma.mjs in.glb ual1|ual2 outDir
+// Quaternius Universal Animation Library・KayKit Character Animations（GLB）→ 動きごとの VRMA + 解析値
+// （Quaternius は A_TPose、KayKit は T-Pose のクリップをレストの Tポーズとして使う）
+// node quaternius2vrma.mjs in.glb ual1|ual2|kaykit outDir
 import fs from 'node:fs';
 import path from 'node:path';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
@@ -30,8 +31,16 @@ const RIGS = {
     leftUpperLeg: 'thigh_l', leftLowerLeg: 'calf_l', leftFoot: 'foot_l', leftToes: 'ball_l',
     rightUpperLeg: 'thigh_r', rightLowerLeg: 'calf_r', rightFoot: 'foot_r', rightToes: 'ball_r',
     ...fingers((n, i, s) => `${n}_0${i}_${s ? 'r' : 'l'}`) },
+  // KayKit（Rig_Medium・Rig_Large 共通）。首・肩・指は無い。wrist を VRM の hand にする
+  kaykit: { hips: 'hips', spine: 'spine', chest: 'chest', head: 'head',
+    leftUpperArm: 'upperarm.l', leftLowerArm: 'lowerarm.l', leftHand: 'wrist.l',
+    rightUpperArm: 'upperarm.r', rightLowerArm: 'lowerarm.r', rightHand: 'wrist.r',
+    leftUpperLeg: 'upperleg.l', leftLowerLeg: 'lowerleg.l', leftFoot: 'foot.l', leftToes: 'toes.l',
+    rightUpperLeg: 'upperleg.r', rightLowerLeg: 'lowerleg.r', rightFoot: 'foot.r', rightToes: 'toes.r' },
 };
-const MAP = RIGS[rig];
+const REST = { ual1: 'A_TPose', ual2: 'A_TPose', kaykit: 'T-Pose' };
+// three はノード名の . などを取り除くので、そろえてから引く
+const MAP = Object.fromEntries(Object.entries(RIGS[rig]).map(([k, v]) => [k, THREE.PropertyBinding.sanitizeNodeName(v)]));
 const buf = fs.readFileSync(inFile);
 const gltf = await new Promise((res, rej) => new GLTFLoader().parse(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength), '', res, rej));
 const scene = gltf.scene;
@@ -44,20 +53,24 @@ const wq = n => byName[MAP[n]].getWorldQuaternion(new THREE.Quaternion());
 const wp = n => byName[MAP[n]].getWorldPosition(new THREE.Vector3());
 const tip = n => { const b = byName[MAP[n]]; const c = b.children.find(c => c.isBone); return c ? c.getWorldPosition(new THREE.Vector3()) : b.getWorldPosition(new THREE.Vector3()); };
 
-const tpose = gltf.animations.find(a => a.name === 'A_TPose');
+const tpose = gltf.animations.find(a => a.name === REST[rig]);
 at(tpose, 0);
 const restInv = Object.fromEntries(names.map(n => [n, wq(n).invert()]));
 const restPos = Object.fromEntries(names.map(n => [n, wp(n)]));
 const floor0 = Math.min(tip('leftToes').y, tip('rightToes').y);
-const restToe = { left: tip('leftToes').y - floor0, right: tip('rightToes').y - floor0 };
 const center = restPos.hips.clone(); center.y = floor0;
-for (const n of names) restPos[n].sub(center);
+// KayKit は2頭身くらいで腰が低い（0.4m 前後）。接地などのしきい値は人の大きさで決めてあるので、腰の高さ 0.9m に拡大してそろえる
+// （VRMA の腰の移動は再生時に当てるモデルの腰の高さに合わせて縮むので、拡大しても動きは変わらない）
+const S = rig === 'kaykit' ? 0.9 / (restPos.hips.y - floor0) : 1;
+const local = v => v.sub(center).multiplyScalar(S);
+const restToe = { left: (tip('leftToes').y - floor0) * S, right: (tip('rightToes').y - floor0) * S };
+for (const n of names) local(restPos[n]);
 console.error(rig, 'T-pose arm dir', wp('leftHand').sub(wp('leftUpperArm')).normalize().toArray().map(v => v.toFixed(2)).join(','), 'hips', restPos.hips.y.toFixed(2));
 
 fs.mkdirSync(outDir, { recursive: true });
 const fps = +fpsS;
 for (const clip of gltf.animations) {
-  if (clip.name === 'A_TPose') continue;
+  if (clip.name === REST[rig]) continue;
   const frameCount = Math.max(2, Math.round(clip.duration * fps) + 1);
   const rot = Object.fromEntries(names.map(n => [n, new Float32Array(frameCount * 4)]));
   const hipsPos = new Float32Array(frameCount * 3);
@@ -69,9 +82,9 @@ for (const clip of gltf.animations) {
       let p = PARENT[n]; while (p && !delta[p]) p = PARENT[p];
       (p ? delta[p].clone().invert().multiply(delta[n]) : delta[n]).toArray(rot[n], i * 4);
     }
-    wp('hips').sub(center).toArray(hipsPos, i * 3);
-    for (const k of ['hips', 'head', 'leftHand', 'rightHand', 'leftFoot', 'rightFoot', 'leftUpperArm', 'rightUpperArm']) track[k].push(wp(k).sub(center).toArray());
-    track.leftToe.push(tip('leftToes').sub(center).toArray()); track.rightToe.push(tip('rightToes').sub(center).toArray());
+    local(wp('hips')).toArray(hipsPos, i * 3);
+    for (const k of ['hips', 'head', 'leftHand', 'rightHand', 'leftFoot', 'rightFoot', 'leftUpperArm', 'rightUpperArm']) track[k].push(local(wp(k)).toArray());
+    track.leftToe.push(local(tip('leftToes')).toArray()); track.rightToe.push(local(tip('rightToes')).toArray());
   }
   for (const n of names) continuous(rot[n]);
   const id = `${rig}_${clip.name}`;

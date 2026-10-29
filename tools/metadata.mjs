@@ -43,6 +43,16 @@ const SOURCES = {
       source: { kind: 'keyframe', url: 'https://quaternius.itch.io/universal-animation-library-2', originalId: id, originalFormat: 'glb', converter: `${CONVERTER}/quaternius2vrma@${VERSION}` },
     }),
   },
+  ...Object.fromEntries(['medium', 'large'].map(size => [`kaykit-${size}`, {
+    dir: `kaykit/${size}`,
+    license: id => ({
+      spdx: 'CC0-1.0',
+      url: 'https://creativecommons.org/publicdomain/zero/1.0/',
+      attribution: 'KayKit Character Animations by Kay Lousberg (CC0 1.0)',
+      authors: [{ name: 'Kay Lousberg', url: 'https://www.kaylousberg.com/' }],
+      source: { kind: 'keyframe', url: 'https://kaylousberg.itch.io/kaykit-character-animations', originalId: `Rig_${size[0].toUpperCase()}${size.slice(1)}/${id}`, originalFormat: 'glb', converter: `${CONVERTER}/quaternius2vrma@${VERSION}` },
+    }),
+  }])),
 };
 
 // 説明文・名前のキーワード → 種類とジャンル（先に当たったものを優先）
@@ -56,7 +66,7 @@ const KIND = [
   ['walk', /walk|march|wander|stroll|step|strut|navigate|stairs|tiptoe/i],
   ['idle', /idle|stand|wait|breath|look around|fold ?arms|foldarms/i],
   ['sports', /basketball|soccer|kick ball|golf|putt|tee|tennis|swim|stroke|swing|boxing|box |punch|kick|throw|catch|baseball|football|frisbee|stretch|exercise|jumping jacks|squat|yoga|tai chi|range of motion|martial|karate|empi|fishing/i],
-  ['action', /get up|getting up|limp|sneak|motorcycle|sword|pistol|shoot|spell|attack|hit|death|fight|melee|shield|zombie|dash|slide|climb|push|pull|pick ?up|carry|chop|farm|harvest|drive|roll|crouch|throw|interact|consume|drink|eat|open|lift|wash|paint|sweep/i],
+  ['action', /get up|getting up|limp|sneak|motorcycle|sword|pistol|shoot|spell|attack|hit|death|fight|melee|shield|zombie|dash|slide|climb|push|pull|pick ?up|carry|chop|farm|harvest|drive|roll|crouch|throw|interact|consume|drink|eat|open|lift|wash|paint|sweep|dodge|crawl|dig|hammer|\bsaw|work|holding|lockpick|pickaxe|aim|reload|magic|summon|spawn|awaken|taunt|flex|use item|transform/i],
 ];
 const GENRE = [
   ['salsa', /salsa/i], ['charleston', /charleston|charelston/i], ['modern', /modern|arabesque|pirouette|jete|glissade|rond de jambe|retire|tendue|coupe/i],
@@ -104,8 +114,8 @@ function build(src, a) {
     keywords = cat ? [cat] : [];
     kindText = `${description} ${/danc|salsa|charleston|charelston|breakdance/i.test(cat) && !/^walk$|^run|cartwheel|flip/i.test(description) ? cat : ''}`;
   } else {
-    name = a.id.replace(/^ual[12]_/, ''); description = name.replace(/_RM$/, ' (root motion)').replace(/_/g, ' ');
-    kindText = name;
+    name = a.id.replace(/^(ual[12]|kaykit)_/, ''); description = name.replace(/_RM$/, ' (root motion)').replace(/_/g, ' ');
+    kindText = src.startsWith('kaykit') ? description : name;
   }
   // 説明文で決まらなければ（"clean" "unknown" など）、カテゴリ名で決める
   const kind = pick(KIND, kindText)[0] ?? pick(KIND, keywords.join(' '))[0] ?? 'other';
@@ -148,8 +158,8 @@ function build(src, a) {
       kind, genre: kind === 'dance' ? pick(GENRE, `${description} ${keywords.join(' ')} ${name}`) : [],
       energy: energyOf(a.energy), bodyParts: parts, locomotion, facing: a.facing,
       floorWork: a.lowHips > 0.2, airborne: a.airborne > 0.1,
-      fingers: src !== 'cmu', expressions: false, lookAt: false,
-      rootMotion: src === 'cmu' || /_RM$/.test(name),
+      fingers: src.startsWith('ual'), expressions: false, lookAt: false,
+      rootMotion: src === 'cmu' || /_RM$/.test(name) || (src.startsWith('kaykit') && a.root.maxTravel > 0.3),
       ...(keywords.length ? { keywords } : {}),
     },
     tempo,
@@ -172,7 +182,7 @@ for (const src of Object.keys(SOURCES)) {
   for (const f of fs.readdirSync(adir).filter(f => f.endsWith('.json')).sort()) {
     const a = JSON.parse(fs.readFileSync(path.join(adir, f), 'utf8'));
     const m = build(src, a);
-    const base = src === 'cmu' ? a.id : a.id.replace(/^ual[12]_/, '');
+    const base = src === 'cmu' ? a.id : a.id.replace(/^(ual[12]|kaykit)_/, '');
     const vrma = `${SOURCES[src].dir}/${base}.vrma`;
     if (!fs.existsSync(path.join(DIR, vrma))) { console.error('VRMA が無い:', vrma); bad++; continue; }
     const errs = check ? check(m) : [];

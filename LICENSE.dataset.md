@@ -25,6 +25,12 @@ This dataset mixes motions from several sources. **Each motion's license is writ
 - Public domain. No attribution required; credit "Animations by Quaternius (https://quaternius.com/)" is appreciated.
 - パブリックドメインです。クレジットは不要ですが、書く場合は上の文をどうぞ。
 
+## `kaykit/medium/`, `kaykit/large/` — KayKit Character Animations 1.1
+
+- `license.spdx`: `CC0-1.0` (https://creativecommons.org/publicdomain/zero/1.0/)
+- By Kay Lousberg (https://www.kaylousberg.com/), from https://kaylousberg.itch.io/kaykit-character-animations. Public domain. No attribution required; credit "Animations by Kay Lousberg" is appreciated.
+- パブリックドメインです。クレジットは不要です。
+
 ## The conversion, tags and metadata / 変換・タグ・メタデータ
 
 The VRMA conversion, the `.motion.json` files and the catalogs made by the open-vrma tools are dedicated to the public domain under **CC0 1.0**. This does not change the terms of the underlying motion data above.

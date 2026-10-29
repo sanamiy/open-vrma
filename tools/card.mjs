@@ -9,6 +9,7 @@ const GROUPS = [
   ['CMU Graphics Lab Motion Capture Database（`cmu/`）', r => r.file.startsWith('cmu/'), '`LicenseRef-CMU-Mocap`（再配布可・販売不可・謝辞）'],
   ['Quaternius Universal Animation Library（`quaternius/ual1/`）', r => r.file.startsWith('quaternius/ual1/'), '`CC0-1.0`'],
   ['Quaternius Universal Animation Library 2（`quaternius/ual2/`）', r => r.file.startsWith('quaternius/ual2/'), '`CC0-1.0`'],
+  ['KayKit Character Animations（`kaykit/medium/` `kaykit/large/`）', r => r.file.startsWith('kaykit/'), '`CC0-1.0`'],
 ];
 const hours = rs => { const sec = rs.reduce((s, r) => s + r.duration, 0); return sec >= 3600 ? (sec / 3600).toFixed(1) + ' 時間' : Math.round(sec / 60) + ' 分'; };
 const lines = GROUPS.map(([name, f, lic]) => { const rs = rows.filter(f); return `| ${name} | ${rs.length.toLocaleString('en')} | ${hours(rs)} | ${lic} |`; });

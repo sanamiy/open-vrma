@@ -37,6 +37,17 @@ for pair in "ual1 https://opengameart.org/sites/default/files/universal_animatio
   mv "$WORK/q-$1"/*.json "$WORK/analysis/$1/"
 done
 
+# KayKit Character Animations（CC0）。itch.io の無料ダウンロード（$0）は直リンクが無いので、
+# zip を展開したものを $SRC/kaykit/ に置いておく（Animations/gltf/Rig_Medium・Rig_Large の GLB を使う）
+for size in medium large; do
+  rigdir=$(find "$SRC/kaykit/" -type d -ipath "*gltf/Rig_$size" 2>/dev/null | head -1)
+  [ -n "$rigdir" ] || { echo "KayKit の Rig_$size が $SRC/kaykit/ に無いので飛ばす"; continue; }
+  mkdir -p "$OUT/kaykit/$size" "$WORK/analysis/kaykit-$size"; rm -rf "$WORK/k-$size"
+  for glb in "$rigdir"/*.glb; do node "$HERE/quaternius2vrma.mjs" "$glb" kaykit "$WORK/k-$size"; done
+  for f in "$WORK/k-$size"/*.vrma; do b=$(basename "$f"); mv "$f" "$OUT/kaykit/$size/${b#kaykit_}"; done
+  mv "$WORK/k-$size"/*.json "$WORK/analysis/kaykit-$size/"
+done
+
 # CMU の説明文の一覧（各フォルダの README の表）
 python3 - "$SRC/cmubvh" "$WORK/cmu-index.json" <<'EOF'
 import glob, json, re, sys

@@ -24,7 +24,7 @@ configs:
 
 再配布できるモーションキャプチャ／アニメーション素材を、**どの VRM モデルにもそのまま当てられる VRM Animation（.vrma）** に変換し、検索用のタグを付けたデータセットです。ログインなしで `huggingface_hub` や `git clone` から取得でき、作品への組み込みは商用でも可能です（各素材の条件は下記）。
 
-Freely redistributable motion data (CMU Graphics Lab Motion Capture Database and Quaternius Universal Animation Library), converted to **VRM Animation (.vrma)** so it plays on any VRM avatar, with machine-readable tags for searching.
+Freely redistributable motion data (CMU Graphics Lab Motion Capture Database, Quaternius Universal Animation Library and KayKit Character Animations), converted to **VRM Animation (.vrma)** so it plays on any VRM avatar, with machine-readable tags for searching.
 
 | | 本数 | 合計時間 | ライセンス |
 |---|---:|---:|---|
@@ -37,6 +37,8 @@ cmu/<subject>_<trial>.vrma          CMU mocap（例 cmu/60_01.vrma = サルサ�
 cmu/<subject>_<trial>.motion.json   そのモーションのメタデータ（ライセンス・タグ・拍・接地など）
 quaternius/ual1/<name>.vrma         Quaternius Universal Animation Library（+ .motion.json）
 quaternius/ual2/<name>.vrma         Quaternius Universal Animation Library 2（+ .motion.json）
+kaykit/medium/<name>.vrma           KayKit Character Animations の Rig_Medium（+ .motion.json）
+kaykit/large/<name>.vrma            KayKit Character Animations の Rig_Large（大柄なキャラ向け、+ .motion.json）
 catalog.parquet / .jsonl / .csv     1行1モーションの一覧（.motion.json から生成）
 LICENSE.md                          素材ごとのライセンスとクレジット
 ```
@@ -73,7 +75,7 @@ hf download Sanami/open-vrma --repo-type dataset --include "cmu/60_*.vrma"   # �
 | `tags.locomotion` | in-place / stepping / traveling / spinning |
 | `tags.floorWork`, `tags.airborne` | 腰を低く落とす時間が長い／両足が浮く時間が長い |
 | `tags.fingers` | 指の動きを含む（Quaternius のみ） |
-| `tags.rootMotion` | 腰の移動を含む（CMU は全部、Quaternius は `_RM` 付きのもの） |
+| `tags.rootMotion` | 腰の移動を含む（CMU は全部、Quaternius は `_RM` 付きのもの、KayKit は腰が動くもの） |
 | `tempo` | 動きの拍（`bpm`・`firstBeat`・`confidence`）。`basis: "steps"` は足の接地の間隔から測った歩数のテンポ、`basis: "motion"` は体の動きの周期から推定した値。`alternatives` に倍・半分の候補。曲のテンポではないので、合わせるときは候補から近いものを選ぶ。はっきりしなければ `bpm: null` |
 | `loop` | 最初と最後のポーズが近いものだけ（`poseDiffDeg`、拍が分かれば `beats`）。無いものはループさせない |
 | `root` | 腰の移動と向き（`netTravel` `maxTravel` は腰の高さ倍、`netTurnDeg` `turnRangeDeg`、`hipsBounce`） |
@@ -94,8 +96,9 @@ hf download Sanami/open-vrma --repo-type dataset --include "cmu/60_*.vrma"   # �
 
 ## 変換について
 
-- VRMA のレストポーズは VRM 1.0 の正規化 Tポーズ（全ボーン回転なし、+Z 向き）です。元データの Tポーズ（CMU は cgspeed 版の1コマ目、Quaternius は `A_TPose`）からの差分として各ボーンの回転を書き出しています。
+- VRMA のレストポーズは VRM 1.0 の正規化 Tポーズ（全ボーン回転なし、+Z 向き）です。元データの Tポーズ（CMU は cgspeed 版の1コマ目、Quaternius は `A_TPose`、KayKit は `T-Pose`）からの差分として各ボーンの回転を書き出しています。
 - 30fps に間引いています。表情・視線のトラックはありません。
+- KayKit は2頭身のキャラ向けの手付けアニメーションで、首・肩・指はありません。体の丸いキャラ向けなので、人の体型に当てると腕が開き気味になります。
 - CMU は 120fps の光学式モーキャプ（2000年代）で、手指はありません。ノイズや床の貫通が残るクリップがあります。
 - 変換ツール: [sanamiy/open-vrma](https://github.com/sanamiy/open-vrma)
 
@@ -104,6 +107,8 @@ hf download Sanami/open-vrma --repo-type dataset --include "cmu/60_*.vrma"   # �
 詳しくは [LICENSE.md](LICENSE.md) を見てください。1本ごとの条件とクレジット文は各 `.motion.json` の `license` にあります。
 
 **Quaternius Universal Animation Library 1・2（`quaternius/`）** — CC0 1.0 Universal。クレジット不要です。Animations by Quaternius (https://quaternius.com/)。
+
+**KayKit Character Animations（`kaykit/`）** — CC0 1.0 Universal。クレジット不要です。Animations by Kay Lousberg (https://www.kaylousberg.com/)。
 
 **CMU Graphics Lab Motion Capture Database（`cmu/`）** — CMU の FAQ によると、このデータは許可なく複製・改変・再配布でき、商用製品に含めることもできます。データそのものを（変換した形でも）販売することはできません。また全件をクロールしないよう求められているので、CMU のサイトではなくこのデータセットか GitHub のミラーから取得してください。作品には次の謝辞を入れてください。
 
